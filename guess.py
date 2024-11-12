@@ -4,9 +4,15 @@ import config
 from pynput import keyboard
 from nltk import ngrams
 
-#Kelime ilk harf boşluk ve silme karakter hatası fixle
-#yabancı karakter fixle
 
+#Buglar:
+#Başlangıçta space basınca hata veriyor. --> ÇÖZÜLDÜ
+#Başlangıçta backspace yapınca hata veriyor. --> ÇÖZÜLDÜ
+#Başlangıçta yabancı karater girince hata veriyor ? --> ÇÖZÜLDÜ
+#Eğer klavyenin üstündeki rakamlara basarsam çalışıyor ancak sağ tarafındakine basarsam çöküyor. -->ÇÖZÜLDÜ
+#Kullanıcı eski yazdığı yazıyı silemiyor.
+#Print verirken strip et.
+#Summuary yaz.
 
 rateJaccard = {}
 rateDice={}
@@ -17,16 +23,30 @@ flag = True
 oldWord=""
 deleteCheck=False
 
-def load_dataset(word):
+def load_dataset(key):
     """pkl dosyasını yükler ve ngram listesini döndürür."""
+    global file,word,oldWord,deleteCheck
     
     path=config.SAVEFILE
     fileExtension=config.FILEEXTENSION
-    file = path + word.lower() + fileExtension
     
-    with open(file, "rb") as f:
-        loaded_ngram_list = list(dill.load(f))
-    return loaded_ngram_list
+
+    word=word.strip()
+    file = path + word.lower() + fileExtension
+    try:
+        with open(file, "rb") as f:   
+            loaded_ngram_list = list(dill.load(f))
+            return loaded_ngram_list
+    except:
+        
+        oldWord+=word
+        word=""
+        
+        deleteCheck=False
+             
+        start_keyboard_listener()
+
+        
 
 def jaccard_score(input_ngram, data_ngram):
     """Jaccard skoru hesaplar."""
@@ -52,6 +72,39 @@ def ngram_to_words(sorted_ngram_values):
         
     return words
 
+def isCharacterBackspace(key): #aslında en sonunda bir karakter kalıyor sistemde ama onu örtülü kapadım ?
+    global deleteCheck,flag,word
+    
+    deleteCheck=True 
+
+    os.system('cls')
+    
+    word = word[:-1]
+    input_ngram=inputToNgram(word)
+    print("Kullanıcı: ", oldWord,word) # silmede output burda tetikleniyor
+    get_similarity_suggestions(input_ngram,key)
+ 
+    deleteCheck=False
+
+    if word=="": 
+        os.system('cls')
+        print("Kullanıcı: ", oldWord,word)
+        flag=True
+
+def isCharacterSpace():
+    global word,flag,oldWord
+    word+=" "
+    oldWord+=word
+    input_ngram=inputToNgram(word)
+    get_similarity_suggestions(input_ngram,key=None)
+    word=""
+    flag = True
+
+def isCharacterEsc():
+    os.system('cls')
+    print("Code execution stopped")
+    quit()
+
 def handle_special_keys(key):
     """Boşluk ve silme gibi özel tuşlara göre işlemler yapar."""
     global word, flag,oldWord,deleteCheck
@@ -59,33 +112,12 @@ def handle_special_keys(key):
     print("Kullanıcı:", oldWord,word)
 
     if key == keyboard.Key.space:
-            
-        word+=" "
-        oldWord+=word
-        input_ngram=inputToNgram(word)
-        get_similarity_suggestions(input_ngram)
-        word=""
-        flag = True
-        
-
+        isCharacterSpace()  
     elif key == keyboard.Key.backspace:
-        deleteCheck=True 
-
-        os.system('cls')
-        
-        word = word[:-1]
-        input_ngram=inputToNgram(word)
-        print("Kullanıcı: ", oldWord,word) # silmede output burda tetikleniyor
-        get_similarity_suggestions(input_ngram)
-    
-        deleteCheck=False
-        if word=="":
-            flag=True
-              
+        isCharacterBackspace(key)     
     elif key == keyboard.Key.esc:
-        os.system('cls')
-        print("Code execution stopped")
-        quit()
+        isCharacterEsc()
+        
 
 def sortAndCombine(rateJaccard,rateDice):
     sorted_by_values_jaccard = sorted(rateJaccard.items(), key=lambda item: item[1], reverse=True)[:3]
@@ -94,10 +126,10 @@ def sortAndCombine(rateJaccard,rateDice):
     ngramToWords_D=ngram_to_words(sorted_by_values_dice)  #Dice
     return ngramToWords_J,ngramToWords_D
 
-def get_similarity_suggestions(input_ngram):
+def get_similarity_suggestions(input_ngram,key):
     global word, flag, loaded_ngram_list, rateJaccard, rateDice
     if flag:
-        loaded_ngram_list = load_dataset(word)
+        loaded_ngram_list = load_dataset(key)
         flag = False
 
     rateJaccard.clear()
@@ -130,18 +162,25 @@ def on_press(key):
 
     try:
         os.system('cls')
+        print(":D",type(key.char))
+
+        if key.char is None:
+            print(":o",key.char)
+            word=""
+            start_keyboard_listener()
 
         word += key.char  
+
+
 
         if deleteCheck==False:
             print("Kullanıcı:", oldWord,word)
         
         input_ngram=inputToNgram(word)
 
-        get_similarity_suggestions(input_ngram)
+        get_similarity_suggestions(input_ngram,key)
    
     except AttributeError:
-        
         handle_special_keys(key)
         
         
@@ -150,5 +189,6 @@ def start_keyboard_listener():
     """Klavye dinleyiciyi başlatır."""
     with keyboard.Listener(on_press=on_press) as listener:
         listener.join()
+
 
 start_keyboard_listener()
